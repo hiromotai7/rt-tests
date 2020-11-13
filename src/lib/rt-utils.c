@@ -390,6 +390,14 @@ void open_tracemark_fd(void)
 	}
 }
 
+void close_tracemark_fd(void)
+{
+	if (tracemark_fd)
+		close(tracemark_fd);
+	if (trace_fd)
+		close(trace_fd);
+}
+
 int trace_file_exists(char *name)
 {
        struct stat sbuf;
@@ -436,4 +444,9 @@ void enable_trace_mark(void)
 {
 	debugfs_prepare();
 	open_tracemark_fd();
+}
+
+void disable_trace_mark(void)
+{
+	close_tracemark_fd();
 }

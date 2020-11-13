@@ -30,6 +30,7 @@ pid_t gettid(void);
 int parse_time_string(char *val);
 
 void enable_trace_mark(void);
+void disable_trace_mark(void);
 void tracemark(char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 #define MSEC_PER_SEC		1000

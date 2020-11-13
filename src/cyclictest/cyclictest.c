@@ -283,9 +283,6 @@ enum {
 	ERROR_NOTFOUND	= -2,
 };
 
-static int trace_fd     = -1;
-static int tracemark_fd = -1;
-
 /*
  * Raise the soft priority limit up to prio, if that is less than or equal
  * to the hard limit
@@ -2297,11 +2294,8 @@ int main(int argc, char **argv)
 		threadfree(parameters[i], sizeof(struct thread_param), parameters[i]->node);
 	}
  out:
-	/* close any tracer file descriptors */
-	if (tracemark_fd >= 0)
-		close(tracemark_fd);
-	if (trace_fd >= 0)
-		close(trace_fd);
+	if (tracelimit)
+		disable_trace_mark();
 
 	/* unlock everything */
 	if (lockall)
