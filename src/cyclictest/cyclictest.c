@@ -177,6 +177,8 @@ static void trigger_update(struct thread_param *par, int diff, int64_t ts);
 static int shutdown;
 static int tracelimit = 0;
 static int trace_marker = 0;
+int snapshot_threshold = 0;
+static int num_snapshot = 0;
 static int verbose = 0;
 static int oscope_reduction = 1;
 static int lockall = 0;
@@ -206,6 +208,8 @@ static pthread_mutex_t refresh_on_max_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t break_thread_id_lock = PTHREAD_MUTEX_INITIALIZER;
 static pid_t break_thread_id = 0;
 static uint64_t break_thread_value = 0;
+static pid_t snapshot_thread_id = 0;
+static uint64_t snapshot_thread_value = 0;
 
 static int aligned = 0;
 static int secaligned = 0;
@@ -710,6 +714,16 @@ static void *timerthread(void *param)
 			trigger_update(par, diff, calctime(now));
 		}
 
+		if (snapshot_threshold && (diff > snapshot_thread_value)) {
+			tracemark("hit latency snapshot threshold (%llu > %d)",
+				  (unsigned long long) diff, snapshot_threshold);
+			pthread_mutex_lock(&break_thread_id_lock);
+			if (snapshot_thread_id == 0)
+				snapshot_thread_id = stat->tid;
+			snapshot_thread_value = diff;
+			num_snapshot++;
+			pthread_mutex_unlock(&break_thread_id_lock);
+		}
 
 		if (duration && (calcdiff(now, stop) >= 0))
 			shutdown++;
@@ -863,6 +877,7 @@ static void display_help(int error)
 #ifdef ARCH_HAS_SMI_COUNTER
                "         --smi             Enable SMI counting\n"
 #endif
+	       "         --snapshot=USEC   send take a trace snapshot when latency > USEC\n"
 	       "-t       --threads         one thread per available processor\n"
 	       "-t [NUM] --threads=NUM     number of threads:\n"
 	       "                           without NUM, threads = max_cpus\n"
@@ -1093,6 +1108,7 @@ enum option_values {
 	OPT_DBGCYCLIC, OPT_POLICY, OPT_HELP, OPT_NUMOPTS,
 	OPT_ALIGNED, OPT_SECALIGNED, OPT_LAPTOP, OPT_SMI,
 	OPT_TRACEMARK, OPT_POSIX_TIMERS,
+	OPT_SNAPSHOTTRACE,
 };
 
 /* numa_available() must be called before any other calls to the numa library */
@@ -1159,6 +1175,7 @@ static void process_options (int argc, char *argv[], int max_cpus)
 			{"policy",           required_argument, NULL, OPT_POLICY },
 			{"help",             no_argument,       NULL, OPT_HELP },
 			{"posix_timers",     no_argument,	NULL, OPT_POSIX_TIMERS },
+			{"snapshot",         required_argument, NULL, OPT_SNAPSHOTTRACE},
 			{NULL, 0, NULL, 0 },
 		};
 		int c = getopt_long(argc, argv, "a::A::b:c:d:D:h:H:i:l:MNo:p:mqrRsSt::uvD:x",
@@ -1196,6 +1213,8 @@ static void process_options (int argc, char *argv[], int max_cpus)
 		case 'b':
 		case OPT_BREAKTRACE:
 			tracelimit = atoi(optarg); break;
+		case OPT_SNAPSHOTTRACE:
+			snapshot_threshold = snapshot_thread_value = atoi(optarg); break;
 		case 'c':
 		case OPT_CLOCK:
 			clocksel = atoi(optarg); break;
@@ -1932,7 +1951,7 @@ int main(int argc, char **argv)
 	/* use the /dev/cpu_dma_latency trick if it's there */
 	set_latency_target();
 
-	if (tracelimit && trace_marker)
+	if ((tracelimit || snapshot_threshold) && trace_marker)
 		enable_trace_mark();
 
 	if (check_timer())
@@ -2277,6 +2296,15 @@ int main(int argc, char **argv)
 		if (break_thread_id) {
 			printf("# Break thread: %d\n", break_thread_id);
 			printf("# Break value: %llu\n", (unsigned long long)break_thread_value);
+		}
+	}
+
+	if (snapshot_threshold) {
+		print_tids(parameters, num_threads);
+		if (snapshot_thread_id) {
+			printf("# Snapshot taking time: %d\n", num_snapshot);
+			printf("# Snapshot thread: %d\n", snapshot_thread_id);
+			printf("# Snapshot value: %llu\n", (unsigned long long)snapshot_thread_value);
 		}
 	}
 

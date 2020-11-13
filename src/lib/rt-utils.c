@@ -26,10 +26,13 @@
 
 #define  TRACEBUFSIZ  1024
 
+extern int snapshot_threshold;
+
 static char debugfileprefix[MAX_PATH];
 static char *fileprefix;
 static int trace_fd = -1;
 static int tracemark_fd = -1;
+static int tracesnapshot_fd = -1;
 static __thread char tracebuf[TRACEBUFSIZ];
 
 /*
@@ -388,6 +391,18 @@ void open_tracemark_fd(void)
 		if ((trace_fd = open(path, O_WRONLY)) < 0)
 			warn("unable to open tracing_on file: %s\n", path);
 	}
+
+	/*
+	 * open the tracing/snapshot file if it's not already open
+	 */
+	if (snapshot_threshold && tracesnapshot_fd < 0) {
+		sprintf(path, "%s/%s", fileprefix, "snapshot");
+		tracesnapshot_fd = open(path, O_WRONLY);
+		if (tracesnapshot_fd < 0) {
+			warn("unable to open snapshot file: %s\n", path);
+			return;
+		}
+	}
 }
 
 void close_tracemark_fd(void)
@@ -396,6 +411,8 @@ void close_tracemark_fd(void)
 		close(tracemark_fd);
 	if (trace_fd)
 		close(trace_fd);
+	if (tracesnapshot_fd)
+		close(tracesnapshot_fd);
 }
 
 int trace_file_exists(char *name)
@@ -436,8 +453,11 @@ void tracemark(char *fmt, ...)
 	/* write the tracemark message */
 	write(tracemark_fd, tracebuf, len);
 
+	if (tracesnapshot_fd)
+		write(tracesnapshot_fd, "1\n", 2);
+	else
 	/* now stop any trace */
-	write(trace_fd, "0\n", 2);
+		write(trace_fd, "0\n", 2);
 }
 
 void enable_trace_mark(void)
